@@ -27,10 +27,14 @@ struct fixed_string {
     template <std::size_t M>
     constexpr fixed_string(const value_type (&array)[M]) noexcept {  //
         static_assert(M - 1 <= N, "Incorrect size of array");
-        std::copy_n(std::begin(array), N, data.begin());
+        std::copy_n(std::begin(array), M, data.begin());
     }
-    [[nodiscard]] constexpr std::size_t size() const noexcept { return N; }
+    [[nodiscard]] constexpr std::size_t size() const noexcept { return data.size(); }
 };
+
+// @note: fixing literal
+template <typename Char, std::size_t M>
+fixed_string(const Char (&)[M]) -> fixed_string<Char, M - 1>;
 
 // Шаблонный класс, хранящий fixed_string достаточной длины для хранения ошибки парсинга
 template <typename Char>

@@ -3,23 +3,13 @@
 #include "types.hpp"
 #include <array>
 #include <expected>
+#include <utility>
 
 namespace stdx::details {
-
-// Пользовательский литерал
-template <fixed_string str>
-static consteval auto operator""_fs();
 
 // Шаблонный класс для хранения форматирующей строчки и ее особенностей
 template <fixed_string Text>
 class format_string {
-    static constexpr auto fmt{Text};
-    static constexpr auto number_placeholders{get_number_placeholders<fmt>()};
-    static_assert(number_placeholders.has_value(), "Failed get_number_placeholders()");
-
-    static constexpr auto placeholder_positions{get_placeholder_positions<number_placeholders.value()>()};
-    static_assert(placeholder_positions.has_value(), "Failed get_placeholder_positions()");
-
     // Функция для получения количества плейсхолдеров и проверки корректности формирующей строки
     template <fixed_string str>
     static consteval std::expected<std::size_t, parse_error<char>> get_number_placeholders() {
@@ -82,7 +72,7 @@ class format_string {
     get_placeholder_positions() {
         constexpr std::size_t N = fmt.size();
         if (!N) {
-            return 0;
+            return {};
         }
         if (!Count) {
             return {};
@@ -99,27 +89,42 @@ class format_string {
                 ++pos;
                 continue;
             }
-            // Проверяем незакрытый плейсхолдер
-            if (pos + 1 >= size) {
+            // Начало плейсхолдера
+            placeholder_start = pos++;
+
+            while (pos < size && fmt.data[pos] != '}') {
+                ++pos;
+            }
+            if (pos == size) {
                 return std::unexpected(parse_error<char>{"Unclosed last placeholder"});
             }
-            // Начало плейсхолдера
-            placeholder_start = pos;
-            ++pos;
 
-            if (pos >= size) {
-                return std::unexpected(parse_error<char>{"\'}\' hasn't been found in appropriate place"});
+            if (placeholder_count >= Count) {
+                return std::unexpected(parse_error<char>{"Too many placeholders"});
             }
-            if (fmt.data[pos] != '}') {
-                ++pos;
-                continue;
-            }
-            res[placeholder_count].push_back(placeholder_start, pos);
-            ++placeholder_count;
+
+            res[placeholder_count++] = std::make_pair(placeholder_start, pos);
             ++pos;
+        }
+        if (placeholder_count != Count) {
+            return std::unexpected(parse_error<char>{"Placeholder count mismatch"});
         }
         return res;
     }
+
+public:
+    static constexpr auto fmt{Text};
+    static constexpr auto number_placeholders{get_number_placeholders<fmt>()};
+    static_assert(number_placeholders.has_value(), "Failed get_number_placeholders()");
+
+    static constexpr auto placeholder_positions{get_placeholder_positions<number_placeholders.value()>()};
+    static_assert(placeholder_positions.has_value(), "Failed get_placeholder_positions()");
 };
+
+// Пользовательский литерал
+template <fixed_string str>
+static consteval auto operator""_fs() {
+    return format_string<str>{};
+}
 
 }  // namespace stdx::details
